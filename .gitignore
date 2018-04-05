@@ -1,0 +1,45 @@
+
+# Intellij
+.idea/
+*.iml
+*.iws
+atlassian-ide-plugin.xml
+*.ipr
+
+# Eclipse
+.project
+.classpath
+.settings
+rebel.xml
+
+# Maven
+log/
+logs/
+target/
+data/
+ocbc/
+
+
+# sbt specific
+.cache
+.history
+.lib/
+dist/*
+
+# Scala-IDE specific
+.scala_dependencies
+.worksheet
+out/
+
+# Binary junk and test data that shouldn't reside in git
+*.jar
+
+#spark
+spark-warehouse/
+checkpoint/
+bigdata/
+
+#titan
+titan/
+titan-on-iod/
+node_modules
