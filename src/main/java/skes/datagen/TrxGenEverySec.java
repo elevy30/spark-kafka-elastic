@@ -24,24 +24,15 @@ import java.util.concurrent.atomic.AtomicLong;
  * Created by eyallevy on 08/12/17
  */
 @Slf4j
-//@Service
-public class TrxGen {
+@Service
+public class TrxGenEverySec {
 
     private final AtomicLong trxId = new AtomicLong(0);
 
     @PostConstruct
     private  void runTimer() {
         ScheduledExecutorService scheduledExecutor = Executors.newSingleThreadScheduledExecutor();
-        //run only in round minutes
-        scheduledExecutor.scheduleAtFixedRate(new MyTask(), millisToNextMinutes(), 60*1000, TimeUnit.MILLISECONDS);
-
-        scheduledExecutor.scheduleAtFixedRate(new MyTask(), 1L, 60*1000, TimeUnit.MILLISECONDS);
-       // scheduledExecutor.scheduleAtFixedRate(TrxGen::writeFile, millisToNextMinutes(), 10*1000, TimeUnit.MILLISECONDS);
-    }
-
-    private long millisToNextMinutes() {
-        LocalDateTime nextMinutes = LocalDateTime.now().plusMinutes(1).truncatedTo(ChronoUnit.MINUTES);
-        return LocalDateTime.now().until(nextMinutes, ChronoUnit.MILLIS);
+        scheduledExecutor.scheduleAtFixedRate(new MyTask(), 1L, 5*1000, TimeUnit.MILLISECONDS);
     }
 
     public class MyTask implements Runnable{
@@ -53,7 +44,7 @@ public class TrxGen {
         @Override
         public void run() {
             try {
-                for (int i = 0; i < 3; i++) {
+
                     Date date = new Date();
                     log.info("HHHH " + date + "HHHH");
                     //index = index + 1;
@@ -62,11 +53,12 @@ public class TrxGen {
 
                     String content = header;
                     String time = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.S").format(date);
-                    if( i%3 == 1 ){
-                        LocalDateTime localDateTime = LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault());
-                        time = localDateTime.minusMinutes(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.S"));
-                    }
+
                     content = content + trxId.incrementAndGet() + "," + time + ",123,100\n";
+                    content = content + trxId.incrementAndGet() + "," + time + ",145,100\n";
+                    content = content + trxId.incrementAndGet() + "," + time + ",156,100\n";
+                    content = content + trxId.incrementAndGet() + "," + time + ",178,100\n";
+                    content = content + trxId.incrementAndGet() + "," + time + ",199,100\n";
                     //content = content +  i + ",456," + newString + ",100\n";
                     log.info("content:\n" + content);
 
@@ -74,28 +66,16 @@ public class TrxGen {
                     bw.write(content);
                     bw.close();
 
-                    try {
-                        Thread.sleep(20000);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
     }
 
-    @SuppressWarnings("unused")
-    private String roundMinutes(int sec) {
-        Clock minuteTickingClock = Clock.tickMinutes(ZoneId.systemDefault());
-        LocalDateTime now = LocalDateTime.now(minuteTickingClock);
-        LocalDateTime roundCeiling = now.plusSeconds(sec);
-        return roundCeiling.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.S"));
-    }
+
 
     public static void main(String[] args) {
-        TrxGen trxGen = new TrxGen();
+        TrxGenEverySec trxGen = new TrxGenEverySec();
         trxGen. runTimer();
     }
 }

@@ -32,7 +32,7 @@ import java.net.URISyntaxException;
 import static org.apache.spark.sql.functions.*;
 
 @Slf4j
-@Service
+//@Service
 public class SparkStreamingJava {
 
     @Value("${spark.input.dir}")

@@ -20,6 +20,7 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+import org.elasticsearch.hadoop.cfg.ConfigurationOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import skes.common.Constant;
@@ -31,9 +32,8 @@ import java.net.URISyntaxException;
 
 import static org.apache.spark.sql.functions.*;
 
-@SuppressWarnings("Duplicates")
 @Slf4j
-//@Service
+@Service
 public class SparkStreamingSql {
 
     @Value("${spark.input.dir}")
@@ -48,7 +48,7 @@ public class SparkStreamingSql {
     @Value("${kafka.bootstrap.servers}")
     private String kafkaBootstrapServer;
 
-    @Value("${trx.topic}")
+    @Value("${trx.topic.sql}")
     private String topic;
 
     private static String bootstrapServerStatic;
@@ -66,10 +66,10 @@ public class SparkStreamingSql {
             deleteTopic();
 
             SparkSession spark = SparkSession.builder().config("spark.sql.shuffle.partitions", 20)
-//                    .config(ConfigurationOptions.ES_NET_HTTP_AUTH_USER, "elastic")
-//                    .config(ConfigurationOptions.ES_NET_HTTP_AUTH_PASS, "elasticpassword")
-//                    .config(ConfigurationOptions.ES_NODES, "127.0.0.1")
-//                    .config(ConfigurationOptions.ES_PORT, "9200")
+                    .config(ConfigurationOptions.ES_NET_HTTP_AUTH_USER, "elastic")
+                    .config(ConfigurationOptions.ES_NET_HTTP_AUTH_PASS, "elasticpassword")
+                    .config(ConfigurationOptions.ES_NODES, "127.0.0.1")
+                    .config(ConfigurationOptions.ES_PORT, "9200")
                     .appName("Streaming112").master("local[*]").getOrCreate();
 
 
@@ -87,7 +87,9 @@ public class SparkStreamingSql {
                 //}else{
                 //    startQuery(args[0], args[1], spark);
                 //}
+
                 Thread.sleep(10000);
+
             }
         } catch (IOException | StreamingQueryException | URISyntaxException | InterruptedException e) {
             e.printStackTrace();
@@ -101,7 +103,7 @@ public class SparkStreamingSql {
         AdminUtils.deleteTopic(zkUtils, topic);
     }
 
-    private static void startQuery(String inputDir, String checkpointDir, SparkSession spark) throws IOException, URISyntaxException, StreamingQueryException {
+    private  void startQuery(String inputDir, String checkpointDir, SparkSession spark) throws IOException, URISyntaxException, StreamingQueryException {
         FileSystem fs = FileSystem.get(new URI(inputDir), new Configuration());
         Path inputDirPath = new Path(inputDir);
         fs.delete(inputDirPath, true);
@@ -131,36 +133,40 @@ public class SparkStreamingSql {
                 .withWatermark(Constant.COL_DATE, "1 seconds");
         //*************************************************************************************
 
-        /////////////////////////////////  Aggregate SQL //////////////////////////////
-        file.createOrReplaceTempView("ds");
-        Dataset<Row> grouped = spark.sql(
-                "select " +
-                            "'TRX' as messageType, " +
-                            "month(datetime) as monthOfYear, " +
-                            "userId, " +
-                            //"window(datetime, '1 minutes') as window, " +
-                            "count(*) as count, sum(amount) as sum, " +
-                            "first(trxId) as trxId " +
-                        "from ds " +
-                        "group by " +
-                            "month(datetime), " +
-                            //"window(datetime, '1 minutes'), " +
-                            "userId");
 
-//        grouped.printSchema();
-//        log.info("Using checkpoint dir: {}", checkpointDirPath);
-//        grouped.show(false);
-        //*************************************************************************************
+        file.createOrReplaceTempView("ds");
+        log.info("-------  Aggregate data  --------");
+
+
         /////////////////////////////////  Aggregate data //////////////////////////////
-//        log.info("-------  Aggregate data  --------");
-//        Dataset<Row> grouped = file.groupBy(window(col(Constant.COL_DATE), "1 minutes", "1 minutes"), col(Constant.COL_PK))
-//                //.groupBy(window(col("datetime"), "1 months", "1 days"), col("s_action"))
-//                .agg(
-//                        lit("TRX").as(Constant.COL_MSG_TYPE),
-//                        first(col(Constant.COL_TRX_ID)).as(Constant.COL_TRX_ID),
-//                        sum(col(Constant.COL_VALUE)).as("sum"),
-//                        count("*").as("count")
-//                );
+        /////////////////////////////////  Aggregate SQL //////////////////////////////
+
+//        Dataset<Row> grouped = spark.sql(
+//                "select " +
+//                            "'TRX' as messageType, " +
+//                            "month(datetime) as monthOfYear, " +
+//                            "userId, " +
+//                            "window(datetime, '1 minutes') as window, " +
+//                            "count(*) as count, sum(amount) as sum, " +
+//                            "first(trxId) as trxId " +
+//                        "from ds " +
+//                        "group by month(datetime), window(datetime, '1 minutes'), userId");
+//        /////////////////////////  prepare msg to kafka   ////////////////////////
+//        log.info("Create dataset KEY, VALUE for sending msg to kafka  (KEY - format for saving profiles to elastic from kafka)");
+//        Column litKey = lit("KAFKA_KEY::");
+//        Column primaryKeyCol = new Column(Constant.COL_PK);
+//        Column[] schemaProfiles = {new Column(Constant.COL_MSG_TYPE), new Column(Constant.COL_TRX_ID), new Column(Constant.COL_WIN), new Column(Constant.COL_PK), new Column(Constant.COL_SUM), new Column(Constant.COL_COUNT)};
+//        grouped = grouped.select(concat(litKey, to_json(struct(primaryKeyCol))).alias("key"), to_json(struct(schemaProfiles)).alias("value"));
+
+
+//        Dataset<Row> grouped = spark.sql("select 'TRX' as messageType, trxId, first(month(datetime)) as monthOfYear,  first(userId) as userId, '1' as count, first(amount) as sum from ds ");
+        Dataset<Row> grouped = spark.sql("select trxId,userId,amount from ds ");
+        /////////////////////////  prepare msg to kafka   ////////////////////////
+        log.info("Create dataset KEY, VALUE for sending msg to kafka  (KEY - format for saving profiles to elastic from kafka)");
+        Column litKey = lit("KAFKA_KEY::");
+        Column primaryKeyCol = new Column(Constant.COL_PK);
+        Column[] schemaProfiles = {new Column(Constant.COL_TRX_ID), new Column(Constant.COL_PK), new Column(Constant.COL_VALUE)};
+        grouped = grouped.select(concat(litKey, to_json(struct(primaryKeyCol))).alias("key"), to_json(struct(schemaProfiles)).alias("value"));
 
         //*************************************************************************************
         //this two line cause this exception
@@ -169,36 +175,22 @@ public class SparkStreamingSql {
         //grouped.show(false);
         //*************************************************************************************
 
-        /////////////////////////  prepare msg to kafka   ////////////////////////
-        log.info("Create dataset KEY, VALUE for sending msg to kafka  (KEY - format for saving profiles to elastic from kafka)");
-        Column litKey = lit("KAFKA_KEY::");
-        Column primaryKeyCol = new Column(Constant.COL_PK);
-        Column[] schemaProfiles = {
-                new Column(Constant.COL_MSG_TYPE),
-                new Column(Constant.COL_TRX_ID),
-                new Column(Constant.COL_PK),
-                //new Column(Constant.COL_WIN),
-                new Column(Constant.COL_SUM),
-                new Column(Constant.COL_COUNT),
-                new Column("monthOfYear")};
-        grouped = grouped.select(concat(litKey, to_json(struct(primaryKeyCol))).alias("key"), to_json(struct(schemaProfiles)).alias("value"));
-
-
         /////////////////////////   Write stream   ////////////////////////
         log.info("-------  Writing Stream  --------");
         DataStreamWriter<Row> dataStreamWriter = grouped.writeStream();
         //complete - will send out --- ALL ---  Aggregated window
         //append   - will send out --- ONLY --- the closed window
         //update   - will send out --- NEW WIN ONLY  ---
-        dataStreamWriter = dataStreamWriter.outputMode("complete");
+        dataStreamWriter = dataStreamWriter.outputMode("update");
         dataStreamWriter = dataStreamWriter
-                .option("truncate", "false");
-                //.option("checkpointLocation", checkpointDirPath.toString());
+                .option("truncate", "false")
+                .option("checkpointLocation", checkpointDirPath.toString());
 
 
         log.info("-------  Writing To Console   --------");
-        dataStreamWriter = dataStreamWriter
-                .format("console");
+        dataStreamWriter = dataStreamWriter.format("console");
+
+
 
 //        log.info("-------  Writing To Kafka   --------");
 //        dataStreamWriter = dataStreamWriter
@@ -207,7 +199,6 @@ public class SparkStreamingSql {
 //                .option("topic", topicStatic)
 //                .option("startingOffsets", "earliest")
 //                .option("endingOffsets", "latest");
-
 //        boolean isSSL = false;
 //        if (isSSL) {
 //            dataStreamWriter = dataStreamWriter
@@ -220,9 +211,7 @@ public class SparkStreamingSql {
 //        }
 
         log.info("-------  Start Stream  --------");
-        StreamingQuery query = dataStreamWriter
-                .trigger(Trigger.ProcessingTime("10 seconds"))
-                .start();
+        StreamingQuery query = dataStreamWriter.trigger(Trigger.ProcessingTime("5 seconds")).start();
         //*************************************************************************************
 
         query.awaitTermination(1);
@@ -231,13 +220,25 @@ public class SparkStreamingSql {
     }
 
 
+    private void deletePath(String pathToDelete) throws IOException, URISyntaxException{
+        log.info("Going to delete folder tree {}", pathToDelete);
+        FileSystem fs = FileSystem.get(new URI(pathToDelete), new Configuration());
+        Path path = new Path(pathToDelete);
+        if(fs.exists(path)) {
+            log.info("deleting {}", pathToDelete);
+            fs.delete(path, true);
+            log.info("{} was deleted", pathToDelete);
+        }
+        fs.close();
+    }
+
     public static void main(String[] args) {
         if (args.length != 2) {
             log.info("Usage: SparkJavaStreamTest <input_dir> <checkpoint_dir>");
             System.exit(-1);
         }
 
-        SparkStreamingSql sparkStreamingJava = new SparkStreamingSql();
+        skes.spark.streaming.SparkStreamingJava sparkStreamingJava = new skes.spark.streaming.SparkStreamingJava();
         sparkStreamingJava.start(args[0], args[1]);
     }
 

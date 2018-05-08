@@ -60,12 +60,15 @@ class SimpleConsumer implements Runnable{
                             } catch (IOException e) {
                                 e.printStackTrace();
                             }
-                            return message;
+                            //System.out.println(message.toJson() + " ---- " + value);
+                            assert message != null;
+                            return message.toJson() + " ---- " + value;
                         }) // trx retrieved.
-                        .map(message -> message == null ? "Massage_not_parsed" : message.print())
+                       .map(message -> message == null ? "Massage_not_parsed" : message)
                         .forEach(data -> {
                             log.info("topic: {} --  msg: {}" ,topics, data);
                             writer.println(data);
+                            writer.flush();
                         });
             }
         } catch (WakeupException e) {
